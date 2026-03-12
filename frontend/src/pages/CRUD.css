@@ -1,0 +1,57 @@
+.crud-page { padding: 36px; max-width: 1400px; }
+
+.table-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 18px;
+}
+.search-input {
+  padding: 10px 16px;
+  border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  font-size: 14px; font-family: 'Plus Jakarta Sans', sans-serif;
+  width: 300px; transition: border-color 0.2s, box-shadow 0.2s;
+  background: var(--bg-card); color: var(--text);
+}
+.search-input:focus { outline: none; border-color: var(--teal); box-shadow: 0 0 0 3px rgba(75,150,150,0.1); }
+
+.table-count { font-size: 13px; color: var(--text-muted); font-weight: 600; }
+
+.action-btns { display: flex; gap: 8px; }
+.mono { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+/* Venta builder */
+.venta-builder {
+  background: var(--bg); border-radius: 12px; padding: 18px; margin-bottom: 18px;
+  border: 1px solid var(--border-light);
+}
+.venta-builder h3 { font-size: 13px; font-weight: 700; color: var(--navy); margin-bottom: 14px; text-transform: uppercase; letter-spacing: 0.05em; }
+.venta-item {
+  display: grid; grid-template-columns: 1fr 80px 100px auto;
+  gap: 10px; align-items: center;
+  margin-bottom: 10px; padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-light);
+}
+.venta-item:last-of-type { border-bottom: none; }
+.venta-item select, .venta-item input {
+  padding: 9px 11px; border: 1.5px solid var(--border); border-radius: 8px;
+  font-size: 13px; font-family: 'Plus Jakarta Sans', sans-serif; background: white;
+}
+.venta-subtotal {
+  font-weight: 800; color: var(--navy); font-size: 13px;
+  font-family: 'JetBrains Mono', monospace; text-align: right;
+}
+.venta-total {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 18px;
+  background: var(--navy); color: white;
+  border-radius: 10px; margin-top: 14px;
+  font-weight: 800; font-size: 17px;
+}
+.add-product-btn {
+  background: rgba(75,150,150,0.1); color: var(--teal-dark);
+  border: 1.5px solid rgba(75,150,150,0.3);
+  padding: 8px 16px; border-radius: 8px; font-weight: 700; font-size: 13px;
+  margin-top: 10px; font-family: 'Plus Jakarta Sans', sans-serif;
+  cursor: pointer; transition: all 0.15s;
+}
+.add-product-btn:hover { background: rgba(75,150,150,0.18); }
