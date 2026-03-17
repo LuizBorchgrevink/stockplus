@@ -9,9 +9,9 @@ export default function Dashboard() {
   const { usuario } = useAuth()
   const donutRef = useRef(null)
   const lineRef  = useRef(null)
-  const [darkMode, setDarkMode] = useState(false)   // ← agrega esta línea
+  const [darkMode, setDarkMode] = useState(false)   
 
-  const toggleDark = () => {                          // ← agrega esta función
+  const toggleDark = () => {                         
   setDarkMode(prev => {
     const next = !prev
     document.documentElement.classList.toggle('dark', next)
