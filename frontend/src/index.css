@@ -302,3 +302,29 @@ tbody tr:hover td { background: #f8fafd; }
 }
 .alert-error   { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
 .alert-success { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+
+html.dark {
+  --bg:           #0d1f2d;
+  --bg-card:      #001f30;
+  --border:       #1a3a50;
+  --border-light: #153245;
+  --text:         #e2eaf2;
+  --text-muted:   #7a9ab0;
+  --text-light:   #4a7090;
+}
+
+html.dark .dash-header,
+html.dark .card,
+html.dark .dash-card,
+html.dark .stat-card {
+  background: #001f30;
+  border-color: #1a3a50;
+}
+
+html.dark table thead tr {
+  background: #0d1f2d;
+}
+
+html.dark tbody tr:hover td {
+  background: #0a1a28;
+}

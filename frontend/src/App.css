@@ -8,4 +8,6 @@
   margin-left: var(--sidebar-width);
   min-height: 100vh;
   background: var(--bg);
+  display: flex;
+  flex-direction: column;
 }
