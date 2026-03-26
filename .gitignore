@@ -1,13 +1,16 @@
 # Python
-backend/venv/
-backend/__pycache__/
-backend/*.pyc
-backend/.env
+venv/
+__pycache__/
+*.pyc
+
+# Variables de entorno
+.env
+.env.local
 
 # Node
-frontend/node_modules/
-frontend/dist/
+node_modules/
+dist/
 
 # Editor
-.vscode/settings.json
-.DS_Store
+.vscode/
+.idea/
