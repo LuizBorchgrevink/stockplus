@@ -116,6 +116,13 @@ export default function Dashboard() {
     </div>
   )
 
+  if (!stats) return (
+    <div className="dash-loading">
+      No se pudieron cargar los datos. Verifica que el backend esté corriendo.
+    </div>
+  )
+
+
   const topProductos = (stats.productos_stock_bajo || []).slice(0, 10)
   const maxStock = topProductos.length ? Math.max(...topProductos.map(p => p.cantidad_stock + p.stock_minimo), 1) : 1
 

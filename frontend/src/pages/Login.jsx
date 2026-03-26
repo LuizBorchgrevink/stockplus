@@ -14,7 +14,7 @@ export default function Login() {
   const navigate = useNavigate()
 
   const handleSubmit = async (e) => {
-    e.preventDefault(); setError(''); setCargando(true)
+    e.preventDefault(); setError(''); setCargando(true); localStorage.clear()
     try {
       const data = await api.login(correo, contrasena)
       if (data.error) { setError(data.error); return }
