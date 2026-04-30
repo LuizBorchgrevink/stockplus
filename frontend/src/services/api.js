@@ -1,4 +1,4 @@
-// api.js – Versión DEMO (sin backend)
+// api.js – Versión DEMO 
 // Simula las respuestas del servidor con datos de ejemplo
 
 const delay = (ms = 300) => new Promise(res => setTimeout(res, ms))
