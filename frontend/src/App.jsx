@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, Outlet, Link } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import Sidebar from './components/Sidebar'
 import Landing from './pages/Landing'
@@ -30,6 +30,19 @@ function PublicRoute({ children }) {
   return token ? <Navigate to="/dashboard" /> : children
 }
 
+function NoEncontrado() {
+  const { token } = useAuth()
+  return (
+    <div className="not-found">
+      <h1>404</h1>
+      <p>La página que buscas no existe.</p>
+      <Link className="btn-primary" to={token ? '/dashboard' : '/'}>
+        {token ? 'Ir al dashboard' : 'Volver al inicio'}
+      </Link>
+    </div>
+  )
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -45,7 +58,7 @@ export default function App() {
             <Route path="/clientes" element={<Clientes />} />
             <Route path="/proveedores" element={<Proveedores />} />
           </Route>
-          <Route path="*" element={<Navigate to="/" />} />
+          <Route path="*" element={<NoEncontrado />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

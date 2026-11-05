@@ -3,9 +3,22 @@ __pycache__/
 *.pyc
 node_modules/
 dist/
+coverage/
+backups/
 .env
 *.log
 .git/
 .vscode/
 .idea/
+
+# Herramientas y artefactos internos
+.docgen/
+.qodo/
+StockPlus-Entrega.zip
+REPORTE_DESARROLLO_STOCKPLUS.md
+backend/test-output.txt
+backend/test-coverage.txt
+
+# Evidencias academicas
+evidencias*
 

@@ -1,191 +1,231 @@
 /**
  * StockPlus - Rutas de Ventas
- * Gestión de ventas con validación de stock y descuento automático
+ * Registro de ventas transaccional: valida stock, usa precios de la base
+ * de datos y bloquea los productos para evitar ventas simultaneas inconsistentes.
  */
 const express = require('express');
-const { getClient } = require('../config/db');
+const { query, getClient } = require('../config/db');
 const { authMiddleware } = require('../middleware/auth');
+const { HttpError, sendError } = require('../utils/http');
+const { parseId, parsePositiveInt } = require('../utils/validation');
 
 const router = express.Router();
 
-// Todas las rutas requieren autenticación
 router.use(authMiddleware);
 
+function fechaISO(value) {
+  return value instanceof Date ? value.toISOString() : value;
+}
+
+function parseLineas(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new HttpError(400, 'La venta debe tener al menos un producto');
+  }
+  if (items.length > 200) {
+    throw new HttpError(400, 'La venta no puede tener mas de 200 lineas');
+  }
+
+  // Agrupa lineas repetidas del mismo producto para descontar el stock real.
+  const agrupadas = new Map();
+
+  for (const item of items) {
+    const idProducto = parseId(item && item.id_producto);
+    const cantidad = parsePositiveInt(item && item.cantidad);
+
+    if (!idProducto) {
+      throw new HttpError(400, 'Cada linea debe incluir un id_producto valido');
+    }
+    if (!cantidad) {
+      throw new HttpError(400, 'La cantidad de cada producto debe ser un entero mayor a cero');
+    }
+
+    agrupadas.set(idProducto, (agrupadas.get(idProducto) || 0) + cantidad);
+  }
+
+  return [...agrupadas.entries()]
+    .map(([idProducto, cantidad]) => ({ idProducto, cantidad }))
+    .sort((a, b) => a.idProducto - b.idProducto);
+}
+
 /**
- * GET /api/ventas
- * Lista las últimas 50 ventas con información de cliente y vendedor
+ * GET /api/ventas?limite=50
+ * Lista las ventas mas recientes con cliente y vendedor.
  */
 router.get('/', async (req, res) => {
   try {
-    const { query } = require('../config/db');
-    const result = await query(`
-      SELECT v.*, c.nombre AS cliente_nombre, u.nombre AS vendedor_nombre
-      FROM ventas v
-      LEFT JOIN clientes c ON v.id_cliente = c.id_cliente
-      LEFT JOIN usuarios u ON v.id_usuario = u.id_usuario
-      ORDER BY v.fecha DESC LIMIT 50
-    `);
+    let limite = parsePositiveInt(req.query.limite) || 50;
+    limite = Math.min(limite, 200);
 
-    const ventas = result.rows.map(row => {
-      const r = { ...row };
-      if (r.fecha) {
-        r.fecha = r.fecha.toISOString();
-      }
-      return r;
-    });
+    const result = await query(
+      `SELECT v.id_venta, v.fecha, v.id_cliente, v.total, v.id_usuario,
+              c.nombre AS cliente_nombre,
+              u.nombre AS vendedor_nombre
+       FROM ventas v
+       LEFT JOIN clientes c ON v.id_cliente = c.id_cliente
+       LEFT JOIN usuarios u ON v.id_usuario = u.id_usuario
+       ORDER BY v.fecha DESC, v.id_venta DESC
+       LIMIT $1`,
+      [limite]
+    );
 
-    return res.json(ventas);
+    return res.json(result.rows.map(row => ({ ...row, fecha: fechaISO(row.fecha) })));
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return sendError(res, err, 'Error al listar las ventas');
   }
 });
 
 /**
  * GET /api/ventas/:id
- * Obtiene una venta por ID con sus detalles
+ * Detalle completo de una venta.
  */
 router.get('/:id', async (req, res) => {
   try {
-    const { query } = require('../config/db');
-    const { id } = req.params;
+    const id = parseId(req.params.id);
+    if (!id) throw new HttpError(400, 'ID de venta invalido');
 
-    // Obtener la venta
-    const ventaResult = await query(`
-      SELECT v.*, c.nombre AS cliente_nombre
-      FROM ventas v LEFT JOIN clientes c ON v.id_cliente = c.id_cliente
-      WHERE v.id_venta = $1
-    `, [id]);
+    const ventaResult = await query(
+      `SELECT v.id_venta, v.fecha, v.id_cliente, v.total, v.id_usuario,
+              c.nombre AS cliente_nombre,
+              u.nombre AS vendedor_nombre
+       FROM ventas v
+       LEFT JOIN clientes c ON v.id_cliente = c.id_cliente
+       LEFT JOIN usuarios u ON v.id_usuario = u.id_usuario
+       WHERE v.id_venta = $1`,
+      [id]
+    );
 
     if (ventaResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Venta no encontrada' });
+      throw new HttpError(404, 'Venta no encontrada');
     }
 
-    const venta = { ...ventaResult.rows[0] };
-    if (venta.fecha) {
-      venta.fecha = venta.fecha.toISOString();
-    }
+    const venta = ventaResult.rows[0];
 
-    // Obtener los detalles de la venta
-    const detallesResult = await query(`
-      SELECT dv.*, p.nombre AS producto_nombre
-      FROM detalle_venta dv JOIN productos p ON dv.id_producto = p.id_producto
-      WHERE dv.id_venta = $1
-    `, [id]);
+    const detallesResult = await query(
+      `SELECT dv.id_detalle, dv.id_producto, dv.cantidad,
+              dv.precio_unitario, dv.subtotal,
+              p.nombre AS producto_nombre
+       FROM detalle_venta dv
+       JOIN productos p ON dv.id_producto = p.id_producto
+       WHERE dv.id_venta = $1
+       ORDER BY dv.id_detalle`,
+      [id]
+    );
 
-    venta.detalles = detallesResult.rows;
-    return res.json(venta);
+    return res.json({
+      ...venta,
+      fecha: fechaISO(venta.fecha),
+      detalles: detallesResult.rows
+    });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return sendError(res, err, 'Error al consultar la venta');
   }
 });
 
 /**
  * POST /api/ventas
- * Registra una nueva venta y descuenta el stock automáticamente.
- * Usa una transacción para garantizar consistencia de datos.
+ * El precio unitario SIEMPRE se toma de la base de datos, nunca del cliente.
  */
 router.post('/', async (req, res) => {
   const client = await getClient();
 
   try {
-    const data = req.body;
-    if (!data) {
-      return res.status(400).json({ error: 'No se recibieron datos' });
+    const data = req.body || {};
+    const lineas = parseLineas(data.productos);
+
+    let idCliente = null;
+    if (data.id_cliente !== undefined && data.id_cliente !== null && data.id_cliente !== '') {
+      idCliente = parseId(data.id_cliente);
+      if (!idCliente) {
+        throw new HttpError(400, 'El cliente seleccionado no es valido');
+      }
     }
 
-    // req.user viene del middleware authMiddleware
-    const id_usuario = req.user.id;
-
-    let id_cliente = data.id_cliente || null;
-    if (id_cliente) {
-      id_cliente = parseInt(id_cliente, 10);
-    }
-
-    const productos = data.productos || [];
-
-    if (!productos || productos.length === 0) {
-      return res.status(400).json({ error: 'La venta debe tener al menos un producto' });
-    }
-
-    // Iniciar transacción
     await client.query('BEGIN');
 
-    // Validar stock disponible para cada producto
-    for (const item of productos) {
-      if (item.id_producto === undefined || item.cantidad === undefined) {
-        throw new Error('Datos de producto inválidos');
-      }
-
-      const prodId = parseInt(item.id_producto, 10);
-      const cantidad = parseInt(item.cantidad, 10);
-
-      if (isNaN(prodId) || isNaN(cantidad)) {
-        throw new Error('Datos de producto inválidos');
-      }
-
-      if (cantidad <= 0) {
-        throw new Error('La cantidad debe ser mayor a cero');
-      }
-
-      const prodResult = await client.query(
-        'SELECT nombre, cantidad_stock FROM productos WHERE id_producto = $1',
-        [prodId]
+    if (idCliente) {
+      const cliente = await client.query(
+        'SELECT id_cliente FROM clientes WHERE id_cliente = $1',
+        [idCliente]
       );
-      const prod = prodResult.rows[0];
-
-      if (!prod) {
-        throw new Error(`Producto ID ${prodId} no existe`);
+      if (cliente.rows.length === 0) {
+        throw new HttpError(404, 'El cliente seleccionado no existe');
       }
-      if (prod.cantidad_stock < cantidad) {
-        throw new Error(
-          `Stock insuficiente para '${prod.nombre}'. Disponible: ${prod.cantidad_stock}`
+    }
+
+    let total = 0;
+    const detalles = [];
+
+    // Bloqueo en orden de ID para evitar interbloqueos entre ventas simultaneas.
+    for (const linea of lineas) {
+      const prodResult = await client.query(
+        `SELECT id_producto, nombre, precio, cantidad_stock, activo
+         FROM productos
+         WHERE id_producto = $1
+         FOR UPDATE`,
+        [linea.idProducto]
+      );
+
+      const producto = prodResult.rows[0];
+      if (!producto) {
+        throw new HttpError(404, `El producto ID ${linea.idProducto} no existe`);
+      }
+      if (!producto.activo) {
+        throw new HttpError(400, `El producto '${producto.nombre}' no esta disponible`);
+      }
+      if (producto.cantidad_stock < linea.cantidad) {
+        throw new HttpError(
+          409,
+          `Stock insuficiente para '${producto.nombre}'. Disponible: ${producto.cantidad_stock}`
         );
       }
+
+      const precio = Number(producto.precio);
+      total += precio * linea.cantidad;
+      detalles.push({
+        idProducto: linea.idProducto,
+        cantidad: linea.cantidad,
+        precio
+      });
     }
 
-    // Calcular total
-    let total = 0;
-    for (const item of productos) {
-      total += parseFloat(item.cantidad) * parseFloat(item.precio_unitario);
-    }
+    total = Math.round(total * 100) / 100;
 
-    // Insertar venta
     const ventaResult = await client.query(
-      'INSERT INTO ventas (id_cliente, total, id_usuario) VALUES ($1, $2, $3) RETURNING id_venta',
-      [id_cliente, total, id_usuario]
+      `INSERT INTO ventas (id_cliente, total, id_usuario)
+       VALUES ($1, $2, $3)
+       RETURNING id_venta, fecha`,
+      [idCliente, total, req.user.id]
     );
-    const id_venta = ventaResult.rows[0].id_venta;
 
-    // Insertar detalles y actualizar stock
-    for (const item of productos) {
-      const prodId = parseInt(item.id_producto, 10);
-      const cantidad = parseInt(item.cantidad, 10);
-      const precio = parseFloat(item.precio_unitario);
+    const venta = ventaResult.rows[0];
 
+    for (const detalle of detalles) {
       await client.query(
         `INSERT INTO detalle_venta (id_venta, id_producto, cantidad, precio_unitario)
          VALUES ($1, $2, $3, $4)`,
-        [id_venta, prodId, cantidad, precio]
+        [venta.id_venta, detalle.idProducto, detalle.cantidad, detalle.precio]
       );
 
       await client.query(
-        'UPDATE productos SET cantidad_stock = cantidad_stock - $1 WHERE id_producto = $2',
-        [cantidad, prodId]
+        `UPDATE productos
+         SET cantidad_stock = cantidad_stock - $1
+         WHERE id_producto = $2`,
+        [detalle.cantidad, detalle.idProducto]
       );
     }
 
-    // Confirmar transacción
     await client.query('COMMIT');
 
     return res.status(201).json({
       mensaje: 'Venta registrada',
-      id_venta,
-      total
+      id_venta: venta.id_venta,
+      fecha: fechaISO(venta.fecha),
+      total,
+      items: detalles.length
     });
   } catch (err) {
-    // Revertir transacción en caso de error
     await client.query('ROLLBACK').catch(() => {});
-    return res.status(400).json({ error: err.message });
+    return sendError(res, err, 'Error al registrar la venta');
   } finally {
     client.release();
   }

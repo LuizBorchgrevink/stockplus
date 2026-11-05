@@ -9,6 +9,8 @@
 .dash-header-left h1 {
   font-size: 18px; font-weight: 800; color: #00324b; letter-spacing: -.02em;
 }
+.dash-subtitle { font-size: 11.5px; color: #6b7e92; font-weight: 600; margin-top: 1px; }
+html.dark .dash-subtitle { color: #7a9ab0; }
 .dash-header-right { display: flex; align-items: center; gap: 10px; }
 .dash-search {
   display: flex; align-items: center; gap: 8px;
@@ -90,6 +92,7 @@
 }
 .users-big { font-size: 34px; font-weight: 800; color: #00324b; letter-spacing: -.04em; line-height: 1; }
 .users-sub { font-size: 11.5px; color: #6b7e92; font-weight: 600; margin-top: 5px; }
+.users-extra { font-size: 11px; color: #9bafc4; margin-top: 6px; font-weight: 500; }
 
 /* Donut */
 .donut-wrap { display: flex; align-items: center; gap: 16px; }
@@ -126,3 +129,56 @@
   animation: spin .7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+.dash-error { flex-direction: column; gap: 14px; text-align: center; height: auto; min-height: 260px; }
+.dash-error p { color: #6b7e92; font-size: 14px; max-width: 420px; }
+.dash-empty { color: #9bafc4; font-size: 12px; text-align: center; padding: 18px 0; }
+.stat-card > div:last-child { min-width: 0; }
+.sc-val { overflow-wrap: anywhere; }
+
+@media (max-width: 1200px) {
+  .mid-grid { grid-template-columns: 1fr 1fr; }
+  .mid-grid > .dash-card:last-child { grid-column: 1 / -1; }
+}
+
+@media (max-width: 900px) {
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .mid-grid { grid-template-columns: 1fr; }
+  .mid-grid > .dash-card:last-child { grid-column: auto; }
+  .dash-header { padding: 12px 18px; }
+  .dash-body { padding: 18px; }
+  .sc-val { font-size: 20px; }
+}
+
+@media (max-width: 560px) {
+  .stats-grid { grid-template-columns: 1fr; }
+  .dash-header { flex-wrap: wrap; gap: 8px; }
+  .dash-body { padding: 14px; }
+  .stat-card { padding: 14px 16px; }
+  .donut-wrap { flex-direction: column; align-items: flex-start; }
+}
+
+html.dark .dash-header-left h1,
+html.dark .sc-val,
+html.dark .card-title,
+html.dark .users-big,
+html.dark .top-val {
+  color: #e8f0f7;
+}
+
+html.dark .sc-lbl,
+html.dark .users-sub,
+html.dark .users-extra,
+html.dark .top-name,
+html.dark .legend-item,
+html.dark .ll-item,
+html.dark .line-period,
+html.dark .dash-empty {
+  color: #8aa7bd;
+}
+
+html.dark .users-icon-box { background: #0a2a3d; }
+html.dark .top-bar-bg { background: #0a2a3d; }
+html.dark .dash-mode-toggle { background: #0a2a3d; border-color: #1a3a50; }
+html.dark .dash-mode-toggle span { color: #8aa7bd; }
+html.dark .dash-mode-toggle span.on { background: #4b9696; color: #fff; }

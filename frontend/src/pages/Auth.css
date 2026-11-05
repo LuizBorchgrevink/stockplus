@@ -102,3 +102,31 @@
 }
 .auth-checkbox input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--teal); }
 .auth-checkbox a { color: var(--teal-dark); font-weight: 600; }
+
+.auth-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+  line-height: 1.5;
+}
+.auth-hint-center {
+  text-align: center;
+  margin-top: 14px;
+}
+
+html.dark .auth-form-box h1 { color: var(--text); }
+html.dark .auth-right { background: var(--bg); }
+html.dark .auth-demo { background: rgba(75,150,150,0.12); }
+
+@media (max-width: 900px) {
+  .auth-left { display: none; }
+  .auth-right {
+    flex: 1;
+    padding: 40px 22px;
+  }
+}
+
+@media (max-width: 480px) {
+  .auth-right { padding: 28px 16px; }
+  .auth-form-box h1 { font-size: 23px; }
+}

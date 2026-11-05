@@ -1,0 +1,77 @@
+# StockPlus - Ejemplo de configuracion Nginx como proxy inverso
+#
+# Uso:
+#   1. Copia este archivo a /etc/nginx/sites-available/stockplus
+#   2. Ajusta server_name y las rutas
+#   3. ln -s /etc/nginx/sites-available/stockplus /etc/nginx/sites-enabled/
+#   4. nginx -t && systemctl reload nginx
+#
+# Requiere que StockPlus escuche en 127.0.0.1:5000 (o el puerto configurado en backend/.env).
+# Si usas HTTPS, emite el certificado con: certbot --nginx -d stockplus.tudominio.com
+
+upstream stockplus_backend {
+    server 127.0.0.1:5000;
+    keepalive 32;
+}
+
+server {
+    listen 80;
+    server_name stockplus.tudominio.com;
+
+    # Redirige a HTTPS. Elimina este bloque si solo usas HTTP en red local.
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name stockplus.tudominio.com;
+
+    # Certificados de Let's Encrypt
+    ssl_certificate     /etc/letsencrypt/live/stockplus.tudominio.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/stockplus.tudominio.com/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+
+    client_max_body_size 10m;
+
+    # Cabeceras de seguridad basicas (Helmet tambien las envia desde la app)
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options DENY always;
+    add_header Referrer-Policy no-referrer always;
+
+    # API y healthcheck
+    location /api/ {
+        proxy_pass http://stockplus_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+
+    location = /healthz {
+        proxy_pass http://stockplus_backend;
+        access_log off;
+    }
+
+    # Frontend compilado
+    root /var/www/stockplus/frontend/dist;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Cache de assets con hash
+    location /assets/ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+        try_files $uri =404;
+    }
+
+    # Opcional: conservar el SPA sin cache para que las actualizaciones se vean
+    location = /index.html {
+        add_header Cache-Control "no-cache";
+    }
+}

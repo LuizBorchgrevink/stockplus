@@ -1,41 +1,69 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { api } from '../services/api'
+import { useAuth } from '../context/AuthContext'
 import './CRUD.css'
 
+const FORM_VACIO = { nombre: '', descripcion: '', precio: '', cantidad_stock: '', stock_minimo: 5, id_proveedor: '' }
+
 export default function Inventario() {
+  const { usuario } = useAuth()
+  const esAdmin = usuario?.rol === 'administrador'
+
   const [productos, setProductos] = useState([])
   const [proveedores, setProveedores] = useState([])
   const [modal, setModal] = useState(false)
   const [editando, setEditando] = useState(null)
   const [busqueda, setBusqueda] = useState('')
   const [verOcultos, setVerOcultos] = useState(false)
-  const [form, setForm] = useState({ nombre: '', descripcion: '', precio: '', cantidad_stock: '', stock_minimo: 5, id_proveedor: '' })
+  const [form, setForm] = useState(FORM_VACIO)
   const [mensaje, setMensaje] = useState({ tipo: '', texto: '' })
+  const [cargando, setCargando] = useState(true)
+  const [guardando, setGuardando] = useState(false)
 
-  const cargar = async () => {
-    const [prods, provs] = await Promise.all([
-      api.getProductos(verOcultos),
-      api.getProveedores()
-    ])
-    setProductos(prods)
-    setProveedores(provs)
+  const cargar = useCallback(async () => {
+    setCargando(true)
+    try {
+      const [prods, provs] = await Promise.all([
+        api.getProductos(verOcultos),
+        api.getProveedores()
+      ])
+      setProductos(prods)
+      setProveedores(provs)
+    } catch (err) {
+      setMensaje({ tipo: 'error', texto: err.message })
+    } finally {
+      setCargando(false)
+    }
+  }, [verOcultos])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  const aviso = (tipo, texto) => {
+    setMensaje({ tipo, texto })
+    setTimeout(() => setMensaje({ tipo: '', texto: '' }), 3500)
   }
-
-  useEffect(() => { cargar() }, [verOcultos])
 
   const abrirModal = (producto = null) => {
     if (producto) {
       setEditando(producto.id_producto)
-      setForm({ nombre: producto.nombre, descripcion: producto.descripcion || '', precio: producto.precio, cantidad_stock: producto.cantidad_stock, stock_minimo: producto.stock_minimo, id_proveedor: producto.id_proveedor || '' })
+      setForm({
+        nombre: producto.nombre,
+        descripcion: producto.descripcion || '',
+        precio: producto.precio,
+        cantidad_stock: producto.cantidad_stock,
+        stock_minimo: producto.stock_minimo,
+        id_proveedor: producto.id_proveedor || ''
+      })
     } else {
       setEditando(null)
-      setForm({ nombre: '', descripcion: '', precio: '', cantidad_stock: '', stock_minimo: 5, id_proveedor: '' })
+      setForm(FORM_VACIO)
     }
     setModal(true)
   }
 
   const guardar = async (e) => {
     e.preventDefault()
+    setGuardando(true)
     try {
       if (editando) {
         await api.updateProducto(editando, form)
@@ -43,54 +71,62 @@ export default function Inventario() {
         await api.createProducto(form)
       }
       setModal(false)
-      setMensaje({ tipo: 'success', texto: editando ? 'Producto actualizado' : 'Producto creado exitosamente' })
+      aviso('success', editando ? 'Producto actualizado' : 'Producto creado exitosamente')
       cargar()
     } catch (err) {
-      setMensaje({ tipo: 'error', texto: err.message })
+      aviso('error', err.message)
+    } finally {
+      setGuardando(false)
     }
-    setTimeout(() => setMensaje({ tipo: '', texto: '' }), 3000)
   }
 
   const ocultar = async (id, nombre) => {
     if (!confirm(`¿Ocultar "${nombre}" del inventario?\n\nEl producto no aparecerá en ventas nuevas pero se mantiene en el historial.`)) return
     try {
       await api.ocultarProducto(id)
-      setMensaje({ tipo: 'success', texto: `"${nombre}" ocultado del inventario` })
+      aviso('success', `"${nombre}" ocultado del inventario`)
       cargar()
     } catch (err) {
-      setMensaje({ tipo: 'error', texto: err.message })
+      aviso('error', err.message)
     }
-    setTimeout(() => setMensaje({ tipo: '', texto: '' }), 3000)
   }
 
   const restaurar = async (id, nombre) => {
     if (!confirm(`¿Restaurar "${nombre}" al inventario?`)) return
     try {
       await api.restaurarProducto(id)
-      setMensaje({ tipo: 'success', texto: `"${nombre}" restaurado al inventario` })
+      aviso('success', `"${nombre}" restaurado al inventario`)
       cargar()
     } catch (err) {
-      setMensaje({ tipo: 'error', texto: err.message })
+      aviso('error', err.message)
     }
-    setTimeout(() => setMensaje({ tipo: '', texto: '' }), 3000)
   }
 
   const filtrados = productos.filter(p =>
     p.nombre.toLowerCase().includes(busqueda.toLowerCase())
   )
-
   const activos = filtrados.filter(p => p.activo !== false)
   const ocultados = filtrados.filter(p => p.activo === false)
 
   const formatCOP = (n) =>
     new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(n)
 
+  const columnas = esAdmin ? 7 : 6
+
   return (
     <div className="crud-page">
       <div className="page-header">
-        <h1>📦 Inventario</h1>
-        <button className="btn-primary" onClick={() => abrirModal()}>+ Nuevo producto</button>
+        <h1>Inventario</h1>
+        {esAdmin && (
+          <button className="btn-primary" onClick={() => abrirModal()}>+ Nuevo producto</button>
+        )}
       </div>
+
+      {!esAdmin && (
+        <div className="info-banner">
+          Tu rol permite consultar el inventario y registrar ventas. Solo un administrador puede crear o modificar productos.
+        </div>
+      )}
 
       {mensaje.texto && <div className={`alert alert-${mensaje.tipo}`}>{mensaje.texto}</div>}
 
@@ -98,83 +134,92 @@ export default function Inventario() {
         <div className="table-toolbar">
           <input
             type="text"
-            placeholder="🔍 Buscar producto..."
+            placeholder="Buscar producto..."
             value={busqueda}
             onChange={e => setBusqueda(e.target.value)}
             className="search-input"
           />
-          <span className="table-count">{activos.length} activos{verOcultos && ocultados.length > 0 ? ` · ${ocultados.length} ocultos` : ''}</span>
+          <span className="table-count">
+            {activos.length} activos{verOcultos && ocultados.length > 0 ? ` · ${ocultados.length} ocultos` : ''}
+          </span>
           <button
+            type="button"
             className={verOcultos ? 'btn-primary' : 'btn-outline'}
             onClick={() => setVerOcultos(!verOcultos)}
             style={{ fontSize: '0.85rem', padding: '6px 14px', marginLeft: 8 }}
           >
-            {verOcultos ? '👁 Ocultar inactivos' : '👁 Mostrar ocultos'}
+            {verOcultos ? 'Ocultar inactivos' : 'Mostrar ocultos'}
           </button>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Nombre</th>
-              <th>Descripción</th>
-              <th>Precio</th>
-              <th>Stock</th>
-              <th>Estado</th>
-              <th>Proveedor</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {activos.map(p => (
-              <tr key={p.id_producto}>
-                <td><strong>{p.nombre}</strong></td>
-                <td>{p.descripcion || '-'}</td>
-                <td className="mono">{formatCOP(p.precio)}</td>
-                <td className="mono">{p.cantidad_stock}</td>
-                <td>
-                  <span className={`badge ${p.cantidad_stock === 0 ? 'badge-danger' : p.cantidad_stock <= p.stock_minimo ? 'badge-warning' : 'badge-success'}`}>
-                    {p.cantidad_stock === 0 ? 'Agotado' : p.cantidad_stock <= p.stock_minimo ? 'Stock bajo' : 'OK'}
-                  </span>
-                </td>
-                <td>{p.proveedor_nombre || '-'}</td>
-                <td>
-                  <div className="action-btns">
-                    <button className="btn-outline" onClick={() => abrirModal(p)}>Editar</button>
-                    <button className="btn-danger" onClick={() => ocultar(p.id_producto, p.nombre)}>Ocultar</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
 
-            {/* Productos ocultados */}
-            {verOcultos && ocultados.map(p => (
-              <tr key={p.id_producto} style={{ opacity: 0.5, backgroundColor: '#f9f9f9' }}>
-                <td><strong>{p.nombre}</strong> <span style={{ fontSize: '0.75rem', color: '#999' }}>(oculto)</span></td>
-                <td style={{ color: '#999' }}>{p.descripcion || '-'}</td>
-                <td className="mono" style={{ color: '#999' }}>{formatCOP(p.precio)}</td>
-                <td className="mono" style={{ color: '#999' }}>{p.cantidad_stock}</td>
-                <td>
-                  <span className="badge" style={{ background: '#ddd', color: '#666' }}>Inactivo</span>
-                </td>
-                <td style={{ color: '#999' }}>{p.proveedor_nombre || '-'}</td>
-                <td>
-                  <div className="action-btns">
-                    <button className="btn-outline" onClick={() => abrirModal(p)}>Editar</button>
-                    <button className="btn-primary" onClick={() => restaurar(p.id_producto, p.nombre)}>Restaurar</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-
-            {filtrados.length === 0 && (
+        {cargando ? (
+          <div className="table-loading">Cargando productos...</div>
+        ) : (
+          <table>
+            <thead>
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: 30, color: '#999' }}>
-                  {busqueda ? 'No se encontraron productos con esa búsqueda' : 'No hay productos registrados'}
-                </td>
+                <th>Nombre</th>
+                <th>Descripción</th>
+                <th>Precio</th>
+                <th>Stock</th>
+                <th>Estado</th>
+                <th>Proveedor</th>
+                {esAdmin && <th>Acciones</th>}
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {activos.map(p => (
+                <tr key={p.id_producto}>
+                  <td><strong>{p.nombre}</strong></td>
+                  <td>{p.descripcion || '-'}</td>
+                  <td className="mono">{formatCOP(p.precio)}</td>
+                  <td className="mono">{p.cantidad_stock}</td>
+                  <td>
+                    <span className={`badge ${p.cantidad_stock === 0 ? 'badge-danger' : p.cantidad_stock <= p.stock_minimo ? 'badge-warning' : 'badge-success'}`}>
+                      {p.cantidad_stock === 0 ? 'Agotado' : p.cantidad_stock <= p.stock_minimo ? 'Stock bajo' : 'OK'}
+                    </span>
+                  </td>
+                  <td>{p.proveedor_nombre || '-'}</td>
+                  {esAdmin && (
+                    <td>
+                      <div className="action-btns">
+                        <button className="btn-outline" onClick={() => abrirModal(p)}>Editar</button>
+                        <button className="btn-danger" onClick={() => ocultar(p.id_producto, p.nombre)}>Ocultar</button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+
+              {verOcultos && ocultados.map(p => (
+                <tr key={p.id_producto} style={{ opacity: 0.55 }}>
+                  <td><strong>{p.nombre}</strong> <span style={{ fontSize: '0.75rem', color: '#999' }}>(oculto)</span></td>
+                  <td style={{ color: '#999' }}>{p.descripcion || '-'}</td>
+                  <td className="mono" style={{ color: '#999' }}>{formatCOP(p.precio)}</td>
+                  <td className="mono" style={{ color: '#999' }}>{p.cantidad_stock}</td>
+                  <td><span className="badge" style={{ background: '#ddd', color: '#666' }}>Inactivo</span></td>
+                  <td style={{ color: '#999' }}>{p.proveedor_nombre || '-'}</td>
+                  {esAdmin && (
+                    <td>
+                      <div className="action-btns">
+                        <button className="btn-outline" onClick={() => abrirModal(p)}>Editar</button>
+                        <button className="btn-primary" onClick={() => restaurar(p.id_producto, p.nombre)}>Restaurar</button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+
+              {filtrados.length === 0 && (
+                <tr>
+                  <td colSpan={columnas} style={{ textAlign: 'center', padding: 30, color: '#999' }}>
+                    {busqueda ? 'No se encontraron productos con esa búsqueda' : 'No hay productos registrados'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {modal && (
@@ -184,26 +229,57 @@ export default function Inventario() {
             <form onSubmit={guardar}>
               <div className="form-group">
                 <label>Nombre *</label>
-                <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} required />
+                <input
+                  value={form.nombre}
+                  onChange={e => setForm({ ...form, nombre: e.target.value })}
+                  maxLength={100}
+                  required
+                />
               </div>
               <div className="form-group">
                 <label>Descripción</label>
-                <textarea value={form.descripcion} onChange={e => setForm({ ...form, descripcion: e.target.value })} rows={2} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '2px solid var(--border)', fontFamily: 'inherit' }} />
+                <textarea
+                  value={form.descripcion}
+                  onChange={e => setForm({ ...form, descripcion: e.target.value })}
+                  rows={2}
+                  maxLength={2000}
+                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '2px solid var(--border)', fontFamily: 'inherit' }}
+                />
               </div>
               <div className="form-row">
                 <div className="form-group">
-                  <label>Precio *</label>
-                  <input type="number" min="1" step="0.01" value={form.precio} onChange={e => setForm({ ...form, precio: e.target.value })} required />
+                  <label>Precio (COP) *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="0.01"
+                    value={form.precio}
+                    onChange={e => setForm({ ...form, precio: e.target.value })}
+                    required
+                  />
                 </div>
                 <div className="form-group">
                   <label>Stock actual *</label>
-                  <input type="number" min="0" value={form.cantidad_stock} onChange={e => setForm({ ...form, cantidad_stock: e.target.value })} required />
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={form.cantidad_stock}
+                    onChange={e => setForm({ ...form, cantidad_stock: e.target.value })}
+                    required
+                  />
                 </div>
               </div>
               <div className="form-row">
                 <div className="form-group">
                   <label>Stock mínimo</label>
-                  <input type="number" min="0" value={form.stock_minimo} onChange={e => setForm({ ...form, stock_minimo: e.target.value })} />
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={form.stock_minimo}
+                    onChange={e => setForm({ ...form, stock_minimo: e.target.value })}
+                  />
                 </div>
                 <div className="form-group">
                   <label>Proveedor</label>
@@ -215,7 +291,9 @@ export default function Inventario() {
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn-outline" onClick={() => setModal(false)}>Cancelar</button>
-                <button type="submit" className="btn-primary">{editando ? 'Actualizar' : 'Crear'}</button>
+                <button type="submit" className="btn-primary" disabled={guardando}>
+                  {guardando ? 'Guardando...' : editando ? 'Actualizar' : 'Crear'}
+                </button>
               </div>
             </form>
           </div>

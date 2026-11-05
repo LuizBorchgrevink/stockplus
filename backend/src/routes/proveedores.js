@@ -1,117 +1,170 @@
 /**
  * StockPlus - Rutas de Proveedores
- * CRUD completo para gestión de proveedores
+ * CRUD de proveedores. Las modificaciones son exclusivas del administrador.
  */
 const express = require('express');
 const { query } = require('../config/db');
 const { authMiddleware } = require('../middleware/auth');
+const { requireRole } = require('../middleware/roles');
+const { HttpError, sendError } = require('../utils/http');
+const { parseId, text, isPhone } = require('../utils/validation');
 
 const router = express.Router();
 
-// Todas las rutas requieren autenticación
 router.use(authMiddleware);
 
+function parseProviderBody(body) {
+  const data = body || {};
+
+  const nombre = text(data.nombre, 100);
+  if (!nombre) {
+    throw new HttpError(400, 'El nombre es requerido (maximo 100 caracteres)');
+  }
+
+  const contacto = text(data.contacto, 100);
+  if (contacto === null) {
+    throw new HttpError(400, 'El contacto no puede superar 100 caracteres');
+  }
+
+  const telefono = text(data.telefono, 20);
+  if (telefono && !isPhone(telefono)) {
+    throw new HttpError(400, 'El telefono solo puede contener numeros, espacios, +, - y parentesis');
+  }
+
+  const direccion = text(data.direccion, 255);
+  if (direccion === null) {
+    throw new HttpError(400, 'La direccion no puede superar 255 caracteres');
+  }
+
+  return {
+    nombre,
+    contacto: contacto || null,
+    telefono: telefono || null,
+    direccion: direccion || null
+  };
+}
+
 /**
- * GET /api/proveedores
- * Lista todos los proveedores ordenados por nombre
+ * GET /api/proveedores?buscar=texto
  */
 router.get('/', async (req, res) => {
   try {
-    const result = await query('SELECT * FROM proveedores ORDER BY nombre');
+    const buscar = text(req.query.buscar, 100) || '';
+    const params = [];
+    let where = '';
+
+    if (buscar) {
+      params.push(`%${buscar}%`);
+      where = 'WHERE nombre ILIKE $1 OR contacto ILIKE $1 OR telefono ILIKE $1';
+    }
+
+    const result = await query(
+      `SELECT * FROM proveedores ${where} ORDER BY nombre LIMIT 500`,
+      params
+    );
     return res.json(result.rows);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return sendError(res, err, 'Error al listar los proveedores');
   }
 });
 
 /**
  * GET /api/proveedores/:id
- * Obtiene un proveedor por su ID
  */
 router.get('/:id', async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = parseId(req.params.id);
+    if (!id) throw new HttpError(400, 'ID de proveedor invalido');
+
     const result = await query('SELECT * FROM proveedores WHERE id_proveedor = $1', [id]);
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Proveedor no encontrado' });
+      throw new HttpError(404, 'Proveedor no encontrado');
     }
     return res.json(result.rows[0]);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return sendError(res, err, 'Error al consultar el proveedor');
   }
 });
 
 /**
- * POST /api/proveedores
- * Crea un nuevo proveedor
+ * POST /api/proveedores (solo administrador)
  */
-router.post('/', async (req, res) => {
+router.post('/', requireRole('administrador'), async (req, res) => {
   try {
-    const d = req.body;
-    if (!d || !(d.nombre || '').trim()) {
-      return res.status(400).json({ error: 'El nombre es requerido' });
-    }
+    const proveedor = parseProviderBody(req.body);
 
     const result = await query(
-      'INSERT INTO proveedores (nombre, contacto, telefono, direccion) VALUES ($1, $2, $3, $4) RETURNING id_proveedor',
-      [d.nombre.trim(), d.contacto || null, d.telefono || null, d.direccion || null]
+      `INSERT INTO proveedores (nombre, contacto, telefono, direccion)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id_proveedor`,
+      [proveedor.nombre, proveedor.contacto, proveedor.telefono, proveedor.direccion]
     );
 
-    return res.status(201).json({ mensaje: 'Proveedor creado', id: result.rows[0].id_proveedor });
+    return res.status(201).json({
+      mensaje: 'Proveedor creado',
+      id: result.rows[0].id_proveedor
+    });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return sendError(res, err, 'Error al crear el proveedor');
   }
 });
 
 /**
- * PUT /api/proveedores/:id
- * Actualiza un proveedor existente
+ * PUT /api/proveedores/:id (solo administrador)
  */
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireRole('administrador'), async (req, res) => {
   try {
-    const { id } = req.params;
-    const d = req.body;
-    if (!d || !(d.nombre || '').trim()) {
-      return res.status(400).json({ error: 'El nombre es requerido' });
-    }
+    const id = parseId(req.params.id);
+    if (!id) throw new HttpError(400, 'ID de proveedor invalido');
+
+    const proveedor = parseProviderBody(req.body);
 
     const result = await query(
-      'UPDATE proveedores SET nombre=$1, contacto=$2, telefono=$3, direccion=$4 WHERE id_proveedor=$5',
-      [d.nombre.trim(), d.contacto || null, d.telefono || null, d.direccion || null, id]
+      `UPDATE proveedores
+       SET nombre = $1, contacto = $2, telefono = $3, direccion = $4
+       WHERE id_proveedor = $5`,
+      [proveedor.nombre, proveedor.contacto, proveedor.telefono, proveedor.direccion, id]
     );
 
     if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'Proveedor no encontrado' });
+      throw new HttpError(404, 'Proveedor no encontrado');
     }
 
     return res.json({ mensaje: 'Proveedor actualizado' });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return sendError(res, err, 'Error al actualizar el proveedor');
   }
 });
 
 /**
- * DELETE /api/proveedores/:id
- * Elimina un proveedor por su ID
+ * DELETE /api/proveedores/:id (solo administrador)
+ * No permite eliminar proveedores con productos asociados.
  */
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireRole('administrador'), async (req, res) => {
   try {
-    const { id } = req.params;
-    const result = await query('DELETE FROM proveedores WHERE id_proveedor = $1', [id]);
+    const id = parseId(req.params.id);
+    if (!id) throw new HttpError(400, 'ID de proveedor invalido');
 
+    const productos = await query(
+      'SELECT COUNT(*)::int AS total FROM productos WHERE id_proveedor = $1',
+      [id]
+    );
+
+    if (productos.rows[0].total > 0) {
+      throw new HttpError(
+        409,
+        'No se puede eliminar el proveedor porque tiene productos asociados.'
+      );
+    }
+
+    const result = await query('DELETE FROM proveedores WHERE id_proveedor = $1', [id]);
     if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'Proveedor no encontrado' });
+      throw new HttpError(404, 'Proveedor no encontrado');
     }
 
     return res.json({ mensaje: 'Proveedor eliminado' });
   } catch (err) {
-    const msg = err.message || '';
-    if (msg.includes('foreign key') || msg.includes('productos')) {
-      return res.status(409).json({
-        error: 'No se puede eliminar el proveedor porque tiene productos asociados.'
-      });
-    }
-    return res.status(500).json({ error: 'Error al eliminar el proveedor' });
+    return sendError(res, err, 'Error al eliminar el proveedor');
   }
 });
 

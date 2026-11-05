@@ -2,25 +2,50 @@
  * StockPlus - Configuración del Pool de Conexiones PostgreSQL
  * Usa el paquete 'pg' para gestión eficiente de conexiones
  */
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
+
 const { Pool } = require('pg');
 
-const pool = new Pool({
-  host: process.env.PG_HOST || 'localhost',
-  port: parseInt(process.env.PG_PORT, 10) || 5432,
-  user: process.env.PG_USER || 'postgres',
-  password: process.env.PG_PASSWORD || '',
-  database: process.env.PG_DB || 'stockplus',
-  connectionTimeoutMillis: 10000,
-  // Pool de conexiones optimizado
-  max: 20,
-  idleTimeoutMillis: 30000,
-  allowExitOnIdle: false
-});
+const sslEnabled = ['1', 'true', 'require'].includes(
+  String(process.env.PG_SSL || '').toLowerCase()
+);
 
-// Verificar conexión al iniciar
+const ssl = sslEnabled
+  ? { rejectUnauthorized: process.env.PG_SSL_REJECT_UNAUTHORIZED === 'true' }
+  : undefined;
+
+const sharedConfig = {
+  connectionTimeoutMillis: 10000,
+  idleTimeoutMillis: 30000,
+  allowExitOnIdle: false,
+  max: parseInt(process.env.PG_POOL_MAX || '20', 10),
+  application_name: 'stockplus',
+  statement_timeout: parseInt(process.env.PG_STATEMENT_TIMEOUT_MS || '30000', 10)
+};
+
+// DATABASE_URL permite usar PostgreSQL gestionado (Render, Railway, Neon,
+// Supabase). Si la URL ya incluye sslmode, node-postgres lo interpreta.
+const pool = new Pool(process.env.DATABASE_URL
+  ? {
+      ...sharedConfig,
+      connectionString: process.env.DATABASE_URL,
+      ...(sslEnabled ? { ssl } : {})
+    }
+  : {
+      ...sharedConfig,
+      host: process.env.PG_HOST || 'localhost',
+      port: parseInt(process.env.PG_PORT, 10) || 5432,
+      user: process.env.PG_USER || 'postgres',
+      password: process.env.PG_PASSWORD || '',
+      database: process.env.PG_DB || 'stockplus',
+      ...(sslEnabled ? { ssl } : {})
+    });
+
+// Un cliente inactivo puede fallar sin que la aplicación deba caerse;
+// el pool descarta esa conexión y sigue atendiendo.
 pool.on('error', (err) => {
   console.error('Error inesperado en el pool de PostgreSQL:', err.message);
-  process.exit(-1);
 });
 
 pool.on('connect', () => {

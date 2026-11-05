@@ -1,13 +1,19 @@
 /**
  * StockPlus - API Service Layer
- * Todas las peticiones al backend se hacen a través de este servicio.
- * En desarrollo usa el proxy de Vite (/api -> backend:5000)
- * En producción usa Nginx para el mismo propósito.
+ * En desarrollo usa el proxy de Vite (/api -> backend:5000).
+ * En la build local el frontend y la API comparten el mismo puerto.
+ * VITE_API_URL permite apuntar a otro servidor si fuese necesario.
  */
-const getBaseUrl = () => '/api'
+const API_BASE_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '')
+
+export const API_URL = API_BASE_URL
 
 function getToken() {
   return localStorage.getItem('token')
+}
+
+function esRutaDeSesion(path) {
+  return path === '/auth/login' || path === '/auth/register'
 }
 
 async function request(method, path, body = null) {
@@ -23,17 +29,27 @@ async function request(method, path, body = null) {
   const options = { method, headers }
   if (body) options.body = JSON.stringify(body)
 
-  const res = await fetch(`${getBaseUrl()}${path}`, options)
-
-  // Manejar token expirado
-  if (res.status === 401) {
-    localStorage.removeItem('token')
-    localStorage.removeItem('usuario')
-    window.location.href = '/login'
-    throw new Error('Sesión expirada. Inicia sesión nuevamente.')
+  let res
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, options)
+  } catch {
+    throw new Error('No se pudo conectar con el servidor. Verifica que StockPlus esté iniciado.')
   }
 
-  const data = await res.json()
+  let data = {}
+  try {
+    data = await res.json()
+  } catch {
+    data = {}
+  }
+
+  // Solo cierra la sesión si el token existía y el fallo no es del propio login.
+  if (res.status === 401 && token && !esRutaDeSesion(path)) {
+    localStorage.removeItem('token')
+    localStorage.removeItem('usuario')
+    window.dispatchEvent(new Event('stockplus:unauthorized'))
+    throw new Error('Tu sesión expiró. Inicia sesión nuevamente.')
+  }
 
   if (!res.ok) {
     throw new Error(data.error || 'Error en la solicitud')
@@ -52,6 +68,9 @@ export const api = {
 
   getMe: () =>
     request('GET', '/auth/me'),
+
+  cambiarPassword: (actual, nueva) =>
+    request('PUT', '/auth/password', { actual, nueva }),
 
   // ── Dashboard ──
   getDashboard: () => request('GET', '/dashboard/stats'),
@@ -80,7 +99,7 @@ export const api = {
   deleteProveedor: (id) => request('DELETE', `/proveedores/${id}`),
 
   // ── Ventas ──
-  getVentas: () => request('GET', '/ventas'),
+  getVentas: (limite = 50) => request('GET', `/ventas?limite=${limite}`),
   getVenta: (id) => request('GET', `/ventas/${id}`),
   createVenta: (data) => request('POST', '/ventas', data),
 }

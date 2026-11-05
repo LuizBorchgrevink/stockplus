@@ -51,9 +51,9 @@ export default function Landing() {
               </button>
             </div>
             <div className="hero-trust">
-              <div className="trust-item">✓ Sin tarjeta de crédito</div>
-              <div className="trust-item">✓ Configuración en minutos</div>
-              <div className="trust-item">✓ Soporte incluido</div>
+              <div className="trust-item">✓ Instalación guiada</div>
+              <div className="trust-item">✓ Datos en tu computador</div>
+              <div className="trust-item">✓ Sin cuotas mensuales</div>
             </div>
           </div>
 
@@ -61,7 +61,7 @@ export default function Landing() {
             <div className="dashboard-preview">
               <div className="dp-header">
                 <div className="dp-dot red" /><div className="dp-dot yellow" /><div className="dp-dot green" />
-                <span className="dp-title">Dashboard — StockPlus</span>
+                <span className="dp-title">Vista de ejemplo — StockPlus</span>
               </div>
               <div className="dp-stats">
                 {[
@@ -113,10 +113,10 @@ export default function Landing() {
       {/* ── Stats strip ── */}
       <div className="lp-stats-strip">
         {[
-          { n: '500+', label: 'Negocios activos' },
-          { n: '2M+', label: 'Productos gestionados' },
-          { n: '99.9%', label: 'Disponibilidad' },
-          { n: '<2s', label: 'Tiempo de respuesta' },
+          { n: '100%', label: 'Local: tus datos en tu equipo' },
+          { n: '2', label: 'Roles: administrador y vendedor' },
+          { n: '6', label: 'Módulos integrados' },
+          { n: '0', label: 'Costos mensuales' },
         ].map((s, i) => (
           <div key={i} className="stats-strip-item">
             <strong>{s.n}</strong>
@@ -163,7 +163,7 @@ export default function Landing() {
       {/* ── Footer ── */}
       <footer className="lp-footer">
         <img src={logo} alt="StockPlus" className="footer-logo" />
-        <p>© 2024 StockPlus · Sistema de gestión de inventario para pequeños negocios</p>
+        <p>© {new Date().getFullYear()} StockPlus · Sistema de gestión de inventario</p>
       </footer>
     </div>
   )

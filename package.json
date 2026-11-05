@@ -1,0 +1,22 @@
+{
+  "name": "stockplus",
+  "version": "1.0.0",
+  "private": true,
+  "description": "StockPlus - Sistema de gestion de inventario para pequenos negocios",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "setup": "node scripts/setup.js",
+    "start": "node scripts/start.js",
+    "start:prod": "node scripts/start.js",
+    "dev": "node scripts/dev.js",
+    "build": "npm --prefix frontend run build",
+    "test": "npm --prefix backend test",
+    "test:coverage": "npm --prefix backend run test:coverage",
+    "verify": "npm test && npm run build",
+    "db:backup": "node backend/scripts/backup.js",
+    "db:reset-password": "node backend/scripts/reset-password.js",
+    "db:create-admin": "node backend/scripts/create-admin.js"
+  }
+}
